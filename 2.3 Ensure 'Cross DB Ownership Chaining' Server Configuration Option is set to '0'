@@ -28,6 +28,26 @@ Run the following T-SQL command:
 Default Value:
 By default, this option is disabled (0).
 
+
+To determine the current status of cross-database ownership chaining, execute the following query:
+
+    SELECT is_db_chaining_on, name FROM sys.databases;
+
+A result of 1 indicates that cross-database ownership chaining is enabled.
+Controlling Cross-Database Ownership Chaining
+Before turning cross-database ownership chaining on or off, consider the following:
+
+You must be a member of the sysadmin fixed server role to turn cross-database ownership chaining on or off.
+
+Before turning off cross-database ownership chaining on a production server, fully test all applications, 
+including third-party applications, to ensure that the changes do not affect application functionality.
+
+You can change the cross db ownership chaining option while the server is running if you specify RECONFIGURE with sp_configure.
+
+If you have databases that require cross-database ownership chaining, the recommended practice is to turn off the cross db 
+ownership chaining option for the instance using sp_configure; then turn on cross-database ownership chaining for individual 
+databases that require it using the ALTER DATABASE statement.
+
 References:
 1. https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/crossdb-
 ownership-chaining-server-configuration-option
