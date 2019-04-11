@@ -1,0 +1,8 @@
+1.1 Ensure Latest SQL Server Service Packs and Hotfixes are Installed
+ 
+ 
+--Audit:
+--To determine your SQL Server service pack level, run the following code snippet.
+    SELECT SERVERPROPERTY('ProductLevel') as SP_installed,
+    SERVERPROPERTY('ProductVersion') as Version;
+ --First column returns the installed Service Pack level, the second is the exact build number.
