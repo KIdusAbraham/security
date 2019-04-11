@@ -1,0 +1,30 @@
+--Description:
+  --Enabling Ad Hoc Distributed Queries allows users to query data and execute statements onexternal data sources. 
+  --This functionality should be disabled.
+
+--Rationale:
+  --This feature can be used to remotely access and exploit vulnerabilities on remote SQL Server instances 
+  --and to run unsafe Visual Basic for Application functions.
+  
+--Audit:
+--un the following T-SQL command:
+    SELECT name,
+    CAST(value as int) as value_configured,
+    CAST(value_in_use as int) as value_in_use
+    FROM sys.configurations
+    WHERE name = 'Ad Hoc Distributed Queries';
+    --Both value columns must show 0.
+
+--Remediation:
+    --Run the following T-SQL command:
+      EXECUTE sp_configure 'show advanced options', 1;
+      RECONFIGURE;
+      EXECUTE sp_configure 'Ad Hoc Distributed Queries', 0;
+      RECONFIGURE;
+      GO
+      EXECUTE sp_configure 'show advanced options', 0;
+      RECONFIGURE;
+      
+ --reference 
+    https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/adhoc-
+distributed-queries-server-configuration-option
