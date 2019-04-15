@@ -24,7 +24,37 @@
       GO
       EXECUTE sp_configure 'show advanced options', 0;
       RECONFIGURE;
-      
+
+
+By default, SQL Server does not allow ad hoc distributed queries using OPENROWSET and OPENDATASOURCE. 
+When this option is set to 1, SQL Server allows ad hoc access. When this option is not set or is set to 0, 
+SQL Server does not allow ad hoc access.
+
+Ad hoc distributed queries use the OPENROWSET and OPENDATASOURCE functions to connect to remote data sources that use OLE DB. OPENROWSET and OPENDATASOURCE should be used only to reference OLE DB data sources that are accessed infrequently. 
+For any data sources that will be accessed more than several times, define a linked server.
+ 
+Remarks
+    Attempting to make an ad hoc connection with Ad Hoc Distributed Queries not enabled results in 
+    error: Msg 7415, Level 16, State 1, Line 1
+
+    Ad hoc access to OLE DB provider 'Microsoft.ACE.OLEDB.12.0' has been denied. You must access this provider 
+    through a linked server.
+
+Examples
+   The following example enables ad hoc distributed queries and then queries a server named Seattle1 using the OPENROWSET function.
+
+    sp_configure 'show advanced options', 1;  
+    RECONFIGURE;
+    GO 
+    sp_configure 'Ad Hoc Distributed Queries', 1;  
+    RECONFIGURE;  
+    GO  
+          SELECT a.*  
+          FROM OPENROWSET('SQLNCLI', 'Server=Seattle1;Trusted_Connection=yes;',  
+               'SELECT GroupName, Name, DepartmentID  
+                FROM AdventureWorks2012.HumanResources.Department  
+                ORDER BY GroupName, Name') AS a;  
+          GO  
  --reference 
     https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/adhoc-
 distributed-queries-server-configuration-option
