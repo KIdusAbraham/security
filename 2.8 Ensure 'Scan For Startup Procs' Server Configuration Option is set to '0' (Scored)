@@ -1,0 +1,35 @@
+Description:
+
+The scan for startup procs option, if enabled, causes SQL Server to scan for and
+automatically run all stored procedures that are set to execute upon service startup.
+
+Rationale:
+
+Enforcing this control reduces the threat of an entity leveraging these facilities for
+malicious purposes.
+
+Audit:
+Run the following T-SQL command:
+      SELECT name,
+      CAST(value as int) as value_configured,
+      CAST(value_in_use as int) as value_in_use
+      FROM sys.configurations
+      WHERE name = 'scan for startup procs';
+  Both value columns must show 0.
+
+Remediation:
+    Run the following T-SQL command:
+        EXECUTE sp_configure 'show advanced options', 1;
+        RECONFIGURE;
+        EXECUTE sp_configure 'scan for startup procs', 0;
+        RECONFIGURE;
+        GO
+        EXECUTE sp_configure 'show advanced options', 0;
+        RECONFIGURE;
+    
+    Restart the Database Engine.
+
+Impact:
+Setting Scan for Startup Procedures to 0 will prevent certain audit traces and other
+commonly used monitoring SPs from re-starting on start up. Additionally, replication
+requires this setting to be enabled (1) and will automatically change this setting if needed.
