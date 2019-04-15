@@ -1,0 +1,28 @@
+Description:
+
+The Database Mail XPs option controls the ability to generate and transmit email
+messages from SQL Server.
+
+Rationale:
+Disabling Database Mail reduces the SQL Server surface, eliminates a DOS attack vector
+and channel to exfiltrate data from the database server to a remote host.
+Audit:
+
+Audit:
+Run the following T-SQL command:
+        SELECT name,
+        CAST(value as int) as value_configured,
+        CAST(value_in_use as int) as value_in_use
+        FROM sys.configurations
+        WHERE name = 'Database Mail XPs';
+    Both value columns must show 0.
+
+Remediation:
+Run the following T-SQL command:
+      EXECUTE sp_configure 'show advanced options', 1;
+      RECONFIGURE;
+      EXECUTE sp_configure 'Database Mail XPs', 0;
+      RECONFIGURE;
+      GO
+      EXECUTE sp_configure 'show advanced options', 0;
+      RECONFIGURE;
