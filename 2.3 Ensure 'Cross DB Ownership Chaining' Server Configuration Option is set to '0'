@@ -48,6 +48,18 @@ If you have databases that require cross-database ownership chaining, the recomm
 ownership chaining option for the instance using sp_configure; then turn on cross-database ownership chaining for individual 
 databases that require it using the ALTER DATABASE statement.
 
+Ownership chaining across databases is turned off by default. Microsoft recommends that you disable cross-database 
+ownership chaining because it exposes you to the following security risks:
+
+        Database owners and members of the db_ddladmin or the db_owners database roles can create objects that are owned by other users. 
+        These objects can potentially target objects in other databases. 
+        This means that if you enable cross-database ownership chaining, you must fully trust these users with data in all databases.
+
+        Users with CREATE DATABASE permission can create new databases and attach existing databases. 
+        If cross-database ownership chaining is enabled, these users can access objects in other databases that t
+        hey might not have privileges in from the newly created or attached databases that they create.
+
+
 References:
 1. https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/crossdb-
 ownership-chaining-server-configuration-option
