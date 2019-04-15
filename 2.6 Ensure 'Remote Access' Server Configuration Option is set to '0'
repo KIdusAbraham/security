@@ -1,0 +1,38 @@
+Description:
+
+    The remote access option controls the execution of local stored procedures on remote
+    servers or remote stored procedures on local server.
+
+Rationale:
+
+    Functionality can be abused to launch a Denial-of-Service (DoS) attack on remote servers
+    by off-loading query processing to a target.
+
+Audit:
+
+Run the following T-SQL command:
+        SELECT name,
+        CAST(value as int) as value_configured,
+        CAST(value_in_use as int) as value_in_use
+        FROM sys.configurations
+        WHERE name = 'remote access';
+        Both value columns must show 0.
+Remediation:
+
+      Run the following T-SQL command:
+      EXECUTE sp_configure 'show advanced options', 1;
+      RECONFIGURE;
+      EXECUTE sp_configure 'remote access', 0;
+      RECONFIGURE;
+      GO
+      EXECUTE sp_configure 'show advanced options', 0;
+      RECONFIGURE;
+      Restart the Database Engine.
+      
+ 
+ This topic describes how to configure the remote access server configuration option in SQL Server 2017 
+ by using SQL Server Management Studio or Transact-SQL. The remote access option controls the execution 
+ of stored procedures from local or remote servers on which instances of SQL Server are running. 
+ This default value for this option is 1. This grants permission to run local stored procedures 
+ from remote servers or remote stored procedures from the local server. To prevent local stored procedures 
+ from being run from a remote server or remote stored procedures from being run on the local server, set the option to 0.
