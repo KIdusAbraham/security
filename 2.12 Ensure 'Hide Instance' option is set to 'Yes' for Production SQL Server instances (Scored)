@@ -1,0 +1,77 @@
+Description:
+
+    Non-clustered SQL Server instances within production environments should be designated
+    as hidden to prevent advertisement by the SQL Server Browser service.
+
+Rationale:
+
+    Designating production SQL Server instances as hidden leads to a more secure installation
+    because they cannot be enumerated. However, clustered instances may break if this option
+    is selected.
+
+Audit:
+Perform either the GUI or T-SQL method shown:
+
+GUI Method
+      1. In SQL Server Configuration Manager, expand SQL Server Network
+      Configuration, right-click Protocols for <server instance>, and then select
+      Properties.
+      2. On the Flags tab, in the Hide Instance box, verify Yes is selected.
+
+T-SQL Method
+Execute the following T-SQL. A value of 1 should be returned.
+        DECLARE @getValue INT;
+        EXEC master..xp_instance_regread
+        @rootkey = N'HKEY_LOCAL_MACHINE',
+        @key = N'SOFTWARE\Microsoft\Microsoft SQL
+        Server\MSSQLServer\SuperSocketNetLib',
+        @value_name = N'HideInstance',
+        @value = @getValue OUTPUT;
+        SELECT @getValue;
+        
+Remediation:
+
+Perform either the GUI or T-SQL method shown:
+GUI Method
+      1. In SQL Server Configuration Manager, expand SQL Server Network
+      Configuration, right-click Protocols for <server instance>, and then select
+      Properties.
+      2. On the Flags tab, in the Hide Instance box, select Yes, and then click OK to close the
+      dialog box. The change takes effect immediately for new connections.
+T-SQL Method
+        Execute the following T-SQL to remediate:
+        EXEC master..xp_instance_regwrite
+        @rootkey = N'HKEY_LOCAL_MACHINE',
+        @key = N'SOFTWARE\Microsoft\Microsoft SQL
+        Server\MSSQLServer\SuperSocketNetLib',
+        @value_name = N'HideInstance',
+        @type = N'REG_DWORD',
+        @value = 1;
+Impact:
+      This method only prevents the instance from being listed on the network. If the instance is
+      hidden (not exposed by SQL Browser), then connections will need to specify the server and
+      port in order to connect. It does not prevent users from connecting to server if they know
+      the instance name and port.
+      If you hide a clustered named instance, the cluster service may not be able to connect to the
+      SQL Server. Please refer to the Microsoft documentation reference.
+      Default Value:
+      By default, SQL Server instances are not hidden.
+      
+      
+      
+Remarks
+If you hide a named instance, you will need to provide the port number in the connection string to connect to the hidden instance, 
+even if the browser service is running. We recommend that you use a static port instead of a dynamic port for the named hidden instance.
+For more information, see Configure a Server to Listen on a Specific TCP Port (SQL Server Configuration Manager).
+
+Clustering
+If you hide a clustered named instance, cluster service may not be able to connect to SQL Server. This will cause the cluster 
+instance's IsAlive check to fail and SQL Server will go offline. We recommend that you create an alias in all the nodes of the 
+clustered instance to reflect the static port that you configured for the instance.
+For more information, see Create or Delete a Server Alias for Use by a Client (SQL Server Configuration Manager).
+
+If you hide a clustered named instance, cluster service may not be able to connect to SQL Server if the LastConnect registry key 
+(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\MSSQLServer\Client\SNI11.0\LastConnect) has a different port than the port that SQL Server 
+is listening on. If the cluster service is unable to make a connection to the SQL Server, you might see an error similar to the 
+following:
+Event ID: 1001: Event Name: Failover clustering resource deadlock.
