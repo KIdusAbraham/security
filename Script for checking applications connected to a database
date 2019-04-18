@@ -1,0 +1,15 @@
+--session script
+select @@SERVERNAME, a.host_name as HostName,d.name as [database], b.local_net_address as net_address, b.connect_time, b.most_recent_session_id as Session_ID, 
+b.net_transport as protocol, a.nt_domain, a.login_name,  b.client_net_address
+from sys.dm_exec_sessions AS a
+join sys.dm_exec_connections AS b ON  a.session_id = b.session_id
+join sys.dm_exec_requests AS c ON  a.session_id = b.session_id 
+join sys.sysdatabases AS d ON   c.database_id= d.dbid
+
+
+
+--Check how applications are connected to the database 
+select @@SERVERNAME, connect_time, most_recent_session_id as Session_ID, 
+net_transport as protocol, 
+client_net_address as IP_address, client_tcp_port as TCPIP
+from sys.dm_exec_connections
