@@ -1,0 +1,805 @@
+--==========================================================================================================================
+--==========================================================================================================================
+---- Corporate  SEG 22.4
+---- Default database for DB administrators
+--==========================================================================================================================
+
+DECLARE @cnt_dba_login INT; 
+SELECT @cnt_dba_login = count(p.name) FROM sys.server_principals p 
+--SELECT * FROM sys.server_principals p
+JOIN sys.syslogins s ON p.sid = s.sid 
+WHERE p.type_desc IN ('SQL_LOGIN', 'WINDOWS_LOGIN', 'WINDOWS_GROUP') 
+AND p.name NOT LIKE '##%' 
+AND p.default_database_name <> 'master' 
+AND s.sysadmin = 1
+IF (@cnt_dba_login = 0)  
+BEGIN
+	exec master..xp_cmdshell 'echo ''SEG_22.4,CIS,DBA users must have a master database default,Comply,No remediation,El parametro "default DB for DBA users" esta deshabilitado> C:\Hardening\Hardnening_Resume.txt''' 
+END
+ 
+ELSE
+BEGIN
+	exec master..xp_cmdshell 'echo ''SEG_22.4,CIS,DBA users must have a master database default,does not Comply,remediation,El parametro "default DB for DBA users" esta deshabilitado> C:\Hardening\Hardnening_Resume.txt''' 
+
+DECLARE @Name SYSNAME 
+DECLARE @Command VARCHAR(2000) 
+DECLARE @DBname SYSNAME
+ 
+DECLARE DBA_LOGIN_CURSOR CURSOR READ_ONLY 
+FOR 
+SELECT p.name, p.default_database_name
+FROM sys.server_principals p 
+    JOIN sys.syslogins s ON p.sid = s.sid 
+WHERE p.type_desc IN ('SQL_LOGIN', 'WINDOWS_LOGIN', 'WINDOWS_GROUP') 
+    AND p.name NOT LIKE '##%' 
+    AND p.default_database_name not in ('master') 
+    AND s.sysadmin = 1 
+
+OPEN DBA_LOGIN_CURSOR 
+FETCH NEXT FROM DBA_LOGIN_CURSOR INTO @Name, @DBname
+ 
+WHILE @@FETCH_STATUS = 0 BEGIN 
+ 
+declare @remediation_script varchar (8000)
+declare @rollback_script varchar (8000)
+--write a remediation script  
+exec master..xp_cmdshell 'echo ''SEG 22.4,CIS,DBA users should have a master database as  default DB,No Comply,remediation,El parametro "default DB for DBA" esta deshabilitado>> C:\Hardening\Hardnening_Resume.txt''' 
+exec master..xp_cmdshell 'echo ''--- Script de remediación,SEG 22.4	>> C:\Hardening\Script_Remediation.txt'''
+set @remediation_script = 'echo alter login ' + quotename(@Name) + ' with default_database = ' + '[master]' + ' >> "C:\Hardening\Script_Remediation.txt"'
+--print @remediation_script
+exec master..xp_cmdshell @remediation_script
+
+--write a rollback script
+exec master..xp_cmdshell 'echo ''--- Script de Roll Back,Corp. 3.8>> C:\Hardening\Script_Rollback.txt'''	
+set @rollback_script = 'echo ' + 'alter login ' + QUOTENAME(@Name) + ' with default_database = ' + quotename(@DBname) + ' >> "C:\Hardening\Script_Rollback.txt"'
+--print @rollback_script
+exec master..xp_cmdshell @rollback_script
+
+
+
+
+    SET @Command = 'alter login ' + QUOTENAME(@Name) +' with default_database = [master]' 
+    --print @Command 
+    EXEC(@Command) 
+    FETCH NEXT FROM DBA_LOGIN_CURSOR INTO @Name, @DBname
+END 
+CLOSE DBA_LOGIN_CURSOR 
+DEALLOCATE DBA_LOGIN_CURSOR 
+END
+GO
+--==========================================================================================================================
+---- CIS 3.8
+---- Default database for Non-DB administrators should not any system database (master, masdb, model, temp and distribution) 
+--==========================================================================================================================
+
+DECLARE @cnt_nonDBA_Login INT; 
+SELECT @cnt_nonDBA_Login  = count(p.name) FROM sys.server_principals p 
+--SELECT * FROM sys.server_principals p
+JOIN sys.syslogins s ON p.sid = s.sid 
+WHERE   p.type_desc IN ('SQL_LOGIN', 'WINDOWS_LOGIN', 'WINDOWS_GROUP','server_role')
+-- Logins that are not process logins
+AND p.name NOT LIKE '##%'
+AND p.default_database_name in ('master', 'model','msdb')
+AND s.sysadmin = 0
+IF (@cnt_nonDBA_Login  = 0)  
+BEGIN
+	exec master..xp_cmdshell 'echo ''Corp. 3.8,CIS,non-DBA users should not have a system databases as  default DB,Comply,No remediation,El parametro "default DB for non-DBA" esta deshabilitado> C:\Hardening\Hardnening_Resume.txt''' 
+END
+
+ELSE
+BEGIN
+
+DECLARE @Name nvarchar(max) 
+DECLARE @Command VARCHAR(2000) 
+DECLARE @Command2 VARCHAR(max) 
+DECLARE @DBname sysname
+ 
+DECLARE NONDBA_USER_LOGIN CURSOR READ_ONLY 
+FOR 
+SELECT p.name 
+FROM sys.server_principals p 
+    JOIN sys.syslogins s ON p.sid = s.sid 
+WHERE p.type_desc IN ('SQL_LOGIN', 'WINDOWS_LOGIN', 'WINDOWS_GROUP','server_role') 
+    AND p.name NOT LIKE '##%' 
+    AND p.default_database_name in ('master', 'model','msdb') 
+    AND s.sysadmin = 0 
+/*--------------------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------
+--
+-------assign the default database for non db (this part can be reassessed to check if there are databases 
+-----		that are mapped that login so that we can assign the database that is mapped to the user as a default database 
+
+--------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------------------*/
+--select @DBname = name from sys.databases where name = db_name(6)
+
+set @DBname = (select top 1(name ) from sys.databases where name not in ('master','msdb','tempdb','model') and [state] = 0)
+OPEN NONDBA_USER_LOGIN 
+FETCH NEXT FROM NONDBA_USER_LOGIN INTO @Name 
+ 
+WHILE @@FETCH_STATUS = 0 BEGIN 
+declare @remediation_script varchar (8000)
+declare @rollback_Script varchar (8000)
+--write a remediation script  
+exec master..xp_cmdshell 'echo ''Corp. 3.8,CIS,non-DBA users should not have a system databases as  default DB,No Comply,remediation,El parametro "default DB for non-DBA" esta deshabilitado>> C:\Hardening\Hardnening_Resume.txt''' 
+exec master..xp_cmdshell 'echo ''--- Script de remediación,Corp. 3.8	>> C:\Hardening\Script_Remediation.txt'''
+set @remediation_script = 'echo alter login ' + quotename(@Name) + ' with default_database = ' + quotename(@DBname) + ' >> >> "C:\Hardening\Script_Remediation.txt"'
+--print @remediation_script 
+exec master..xp_cmdshell @remediation_script
+
+--write a rollback script
+exec master..xp_cmdshell 'echo ''--- Script de Roll Back,Corp. 3.8>> C:\Hardening\Script_Rollback.txt'''	
+set @rollback_Script = 'echo ' + 'alter login ' + QUOTENAME(@Name) + ' with default_database = ' + '[master]' + ' >> "C:\Hardening\Script_Rollback.txt"'
+--print @rollback_Script
+exec master..xp_cmdshell @rollback_Script
+
+    SET @Command = 'alter login ' + QUOTENAME(@Name) +' with default_database =  ' + QUOTENAME(@DBname) 
+    --print @Command 
+    EXEC(@Command) 
+    FETCH NEXT FROM NONDBA_USER_LOGIN INTO @Name 
+END 
+CLOSE NONDBA_USER_LOGIN 
+DEALLOCATE NONDBA_USER_LOGIN 
+END
+GO
+
+
+
+--==========================================================================================================================
+--==========================================================================================================================
+---- Script de Remediación de compliance SQL Server para US 
+---- Descripción: Valida el cumplimiento de las reglas de hardening de US establecidas en "SQL Server Hardening Guide 2018"
+---- Elaborado por: Miguel Benítez Santos
+---- Fecha: 13 de Diciembre de 2018
+---- Versión: 1.1 Crea tablas temporales para su ejecución 
+---- Versión: 1.2 Se eleiminan tablas temporales para cumplir con regla gubernamental
+--==========================================================================================================================
+--==========================================================================================================================
+---- Inicio de Sript Busca cumplimiento de reglas y se almacenan en Archivo Hardnening_Resume.txt
+---- En caso de que incumplan almacena script de remediación en Script_Remediation.txt,
+---- Almacena el script de Rollback en Script_Rollback.txt
+---- y ejecuta la remediación                                                                          
+--==========================================================================================================================
+--==========================================================================================================================
+
+---- Declaración de variables globales
+
+DECLARE @run_value INT -- Variablle para los valores de configuración de parámetros de sys.configurations 
+DECLARE @run_value_ad INT
+
+--==========================================================================================================================
+--==========================================================================================================================
+---- Corporate  SEG 2.6
+---- Ensure 'Remote Access' Server Configuration Option is set to '0'
+--==========================================================================================================================
+SELECT @run_value = CONVERT(INT,value), @run_value_ad = CONVERT(INT,value_in_use) FROM sys.configurations
+WHERE name = 'remote admin connections'
+AND SERVERPROPERTY('IsClustered') = 0
+
+IF (@run_value = 0 AND @run_value_ad =0 )
+
+
+	BEGIN
+
+	exec master..xp_cmdshell 'echo ''SEG2.6,CIS,remote admin connections,Comply,No remediation,El parámetro "Remote Admin Connections" esta deshabilitado> C:\Hardening\Hardnening_Resume.txt'''
+
+	END
+ELSE
+	BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_2.6,CIS,remote admin connections,No Comply,Remediation,El parámetro "Remote Admin Connections" esta Habilitado>> C:\Hardening\Hardnening_Resume.txt'''
+exec master..xp_cmdshell 'echo ''--- Script de remediación,ref9,2.6	> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''remote access'', 0;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+
+		exec master..xp_cmdshell 'echo ''--- Script de Roll Back,Ref9,2.6> C:\Hardening\Script_Rollback.txt'''	
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''remote access'', 1;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+
+	End
+	go
+
+	--Remediation ejecute
+
+exec ('EXECUTE sp_configure ''show advanced options'', 1;')
+exec ('RECONFIGURE;')
+exec ('EXECUTE sp_configure ''remote access'', 0;')
+exec ('RECONFIGURE;')
+exec ('EXECUTE sp_configure ''show advanced options'', 0;')
+exec ('RECONFIGURE;')
+--==========================================================================================================================
+---- SEG 2.7
+---- Ensure 'Remote Admin Connections' Server Configuration Option is set to '0' 
+--- Queda fuera de alcance por requerimiento de Biztak
+--==========================================================================================================================
+DECLARE @run_value INT -- Variablle para los valores de configuración de parámetros de sys.configurations 
+DECLARE @run_value_ad INT
+
+SELECT @run_value = CONVERT(INT,value_in_use)
+	FROM sys.configurations
+	WHERE name = 'remote admin connections'
+
+IF (@run_value = 0)
+
+	BEGIN 
+		exec master..xp_cmdshell 'echo ''SEG_2.7,CIS,Ensure Remote Admin Connections Server Configuration Option is set to ''0'',Comply,No Remediation,El parámetro remote admin connections esta Deshabilitado> C:\Hardening\Hardnening_Resume.txt'''
+	END
+ELSE
+
+	BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_2.7,CIS,Ensure Remote Admin Connections Server Configuration Option is set to ''0'',No Comply,Remediation,El parámetro "remote admin connections" esta habilitado> C:\Hardening\Hardnening_Resume.txt'''
+
+		exec master..xp_cmdshell 'echo ''--- Script de remediación ref10,2.7>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''execute sp_configure ''show advanced options'', 1;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''remote admin connections'', 0;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''GO;>> C:\Hardening\Script_Remediation.txt''' 
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+
+		exec master..xp_cmdshell 'echo ''--- Script de RollBack ref10,2.7>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''execute sp_configure ''show advanced options'', 1;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo '' EXECUTE sp_configure ''remote admin connections'', 1;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo '' GO;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo '' EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo '' RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+	End
+	--Remediation ejecute
+go 
+exec ('EXECUTE sp_configure ''show advanced options'', 1;')
+exec ('RECONFIGURE;')
+exec ('EXECUTE sp_configure ''remote admin connections'', 0;')
+exec ('RECONFIGURE;')
+
+exec ('EXECUTE sp_configure ''show advanced options'', 0;')
+exec ('RECONFIGURE;')
+
+--==========================================================================================================================
+---- SEG 2.8
+
+---- The scan for startup procs configuration must be disabled
+--==========================================================================================================================
+DECLARE @run_value INT -- Variablle para los valores de configuración de parámetros de sys.configurations 
+DECLARE @run_value_ad INT
+
+SELECT @run_value = CONVERT(INT,value_in_use)
+	FROM sys.configurations
+
+	WHERE name = 'scan for startup procs'
+
+IF (@run_value = 0)
+
+BEGIN
+
+		exec master..xp_cmdshell 'echo ''SEG_2.8,CIS,The scan for startup procs configuration must be disabled,Comply,No Remediation,El parámetro "scan for startup procs" esta Deshabilitado>> C:\Hardening\Hardnening_Resume.txt'''
+END
+
+ELSE
+
+BEGIN
+
+		exec master..xp_cmdshell 'echo ''SEG_2.8,CIS,The scan for startup procs configuration must be disabled,No Comply,Remediation,El parámetro "scan for startup procs" esta habilitado>> C:\Hardening\Hardnening_Resume.txt'''
+		
+		exec master..xp_cmdshell 'echo ''--- Script de remediación ref11,2.8	> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''scan for startup procs'', 0;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+
+exec master..xp_cmdshell 'print ''--- Script de Roll Back ref11,2.8> C:\Hardening\Script_Rollback.txt'''	
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''scan for startup procs'', 1;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+
+End
+--Remediation ejecute
+go 
+exec ('EXECUTE sp_configure ''show advanced options'', 1;')
+exec ('RECONFIGURE;')
+exec ('EXECUTE sp_configure ''scan for startup procs'', 0;')
+exec ('RECONFIGURE;')
+
+exec ('EXECUTE sp_configure ''show advanced options'', 0;')
+exec ('RECONFIGURE;')
+--==========================================================================================================================
+---- SEG 2.1
+
+---- Ensure 'Ad Hoc Distributed Queries' Server Configuration Option is set to '0'
+--==========================================================================================================================
+DECLARE @run_value INT -- Variablle para los valores de configuración de parámetros de sys.configurations 
+DECLARE @run_value_ad INT
+
+SELECT name,
+CAST(value as int) as value_configured,
+CAST(value_in_use as int) as value_in_use
+FROM sys.configurations
+WHERE name = 'Ad Hoc Distributed Queries';
+
+IF (@run_value = 0)
+
+BEGIN
+
+		exec master..xp_cmdshell 'echo ''SEG_2.1,CIS,Ensure ''Ad Hoc Distributed Queries'' Server Configuration Option is set to ''0'',Comply,No remediation,El parámetro "Ad Hoc Distributed Queries" esta deshabilitado>> C:\Hardening\Hardnening_Resume.txt'''
+
+END
+
+ELSE
+
+BEGIN
+
+		exec master..xp_cmdshell 'echo ''SEG_2.1,CIS,Ensure ''Ad Hoc Distributed Queries'' Server Configuration Option is set to ''0'',No Comply,Remediation,El parámetro "Ad Hoc Distributed Queries" esta habilitado>> C:\Hardening\Hardnening_Resume.txt'''
+
+
+		exec master..xp_cmdshell 'echo ''--- Script de remediación ref13,2.1	> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''Ad Hoc Distributed Queries'', 0;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+
+exec master..xp_cmdshell 'echo ''--- Script de Roll Back ref13,2.1> C:\Hardening\Script_Rollback.txt'''	
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''Ad Hoc Distributed Queries'', 1;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+
+end
+go 
+--Remediation ejecute
+exec ('EXECUTE sp_configure ''show advanced options'', 1;')
+exec ('RECONFIGURE;')
+exec ('EXECUTE sp_configure ''Ad Hoc Distributed Queries'', 0;')
+exec ('RECONFIGURE;')
+
+exec ('EXECUTE sp_configure ''show advanced options'', 0;')
+exec ('RECONFIGURE;')
+
+--==========================================================================================================================
+---- SEG_2.2
+
+---- 'Ensure "CLR Enabled" Server Configuration Option is set to "0"
+--==========================================================================================================================
+
+DECLARE @run_value INT -- Variablle para los valores de configuración de parámetros de sys.configurations 
+DECLARE @run_value_ad INT
+
+	SELECT @run_value = CONVERT(INT,value_in_use) 
+	FROM sys.configurations
+
+	WHERE name = 'clr enabled'
+
+IF (@run_value = 0)
+
+BEGIN
+
+		exec master..xp_cmdshell 'echo ''SEG_2.2,CIS,Ensure ''CLR Enabled'' Server Configuration Option is set to ''0'',Comply,No remediation,El parámetro "CLR Enabled" esta deshabilitado>> C:\Hardening\Hardnening_Resume.txt'''
+END
+
+ELSE
+
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_2.2,CIS,Ensure ''CLR Enabled'' Server Configuration Option is set to ''0'',No Comply,Remediation,El parámetro "CLR Enabled" esta habilitado>> C:\Hardening\Hardnening_Resume.txt'''
+
+
+		exec master..xp_cmdshell 'echo ''--- Script de remediación ref14,2.2	> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''clr enabled'', 0;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+
+exec master..xp_cmdshell 'echo ''--- Script de Roll Back ref14,2.2> C:\Hardening\Script_Rollback.txt'''	
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''clr enabled'', 1;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+
+end
+go 
+--Remediation ejecute
+exec ('sp_configure ''show advanced options'', 1;') 
+ 
+exec ('RECONFIGURE;') 
+
+exec ('sp_configure ''clr enabled'', 0;')
+
+exec ('RECONFIGURE;') 
+
+GO  
+--==========================================================================================================================
+---- SEG 2.3
+
+---- 'Ensure "Cross DB Ownership Chaining" Server Configuration Option is set to "0"'
+--==========================================================================================================================
+DECLARE @run_value INT -- Variablle para los valores de configuración de parámetros de sys.configurations 
+DECLARE @run_value_ad INT
+
+	SELECT @run_value = CONVERT(INT,value_in_use)
+	FROM sys.configurations
+WHERE name = 'cross db ownership chaining'
+IF (@run_value = 0)
+	
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_2.3,CIS,Ensure ''Cross DB Ownership Chaining'' Server Configuration Option is set to ''0'',Comply,No remediation,El parámetro "Cross DB Ownership Chaining" esta deshabilitado>> C:\Hardening\Hardnening_Resume.txt'''
+END
+
+ELSE
+
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_2.3,CIS,Ensure ''Cross DB Ownership Chaining'' Server Configuration Option is set to ''0'',No Comply,Remediation,El parámetro "Cross DB Ownership Chaining" esta habilitado>> C:\Hardening\Hardnening_Resume.txt'''
+
+
+		exec master..xp_cmdshell 'echo ''--- Script de remediación ref15,2.3	> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''cross db ownership chaining'', 0;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+
+exec master..xp_cmdshell 'echo ''--- Script de Roll Back ref15,2.3> C:\Hardening\Script_Rollback.txt'''	
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''cross db ownership chaining'', 1;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+
+end
+go 
+--Remediation ejecute
+exec ('sp_configure ''show advanced options'', 1;') 
+
+exec ('RECONFIGURE;') 
+
+exec ('sp_configure ''cross db ownership chaining'', 0;')
+
+exec ('RECONFIGURE;') 
+
+go
+--==========================================================================================================================
+---- SEG 2.4
+
+---- Ensure "Database Mail XPs" Server Configuration Option is set to "0"
+--==========================================================================================================================
+DECLARE @run_value INT -- Variablle para los valores de configuración de parámetros de sys.configurations 
+DECLARE @run_value_ad INT
+
+	SELECT @run_value = CONVERT(INT,value), @run_value_ad = CONVERT(INT,value_in_use)
+	FROM sys.configurations
+
+	WHERE name = 'Database Mail XPs'
+IF (@run_value = 0 AND @run_value_ad =0 )
+
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_2.4,CIS,Ensure ''Database Mail XPs'' Server Configuration Option is set to ''0'',Comply,No remediation,El parámetro "Database Mail XPs" esta deshabilitado>> C:\Hardening\Hardnening_Resume.txt'''
+END
+
+ELSE
+
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_2.4,CIS,Ensure ''Database Mail XPs'' Server Configuration Option is set to ''0'',No Comply,Remediation,El parámetro "Database Mail XPs" esta habilitado>> C:\Hardening\Hardnening_Resume.txt'''
+		
+		exec master..xp_cmdshell 'echo ''--- Script de remediación ref16,2.4	> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''Database Mail XPs'', 0;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+
+exec master..xp_cmdshell 'echo ''--- Script de Roll Back ref16,2.4> C:\Hardening\Script_Rollback.txt'''	
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''Database Mail XPs'', 1;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+
+end
+go 
+
+--Remediation ejecute
+exec ('sp_configure ''show advanced options'', 1;') 
+
+exec ('RECONFIGURE;') 
+
+exec ('sp_configure ''Database Mail XPs'', 0;')
+
+exec ('RECONFIGURE;') 
+
+go
+--==========================================================================================================================
+---- SEG 2.5
+---- Ensure "Ole Automation Procedures" Server Configuration Option is set to "0"
+--==========================================================================================================================
+DECLARE @run_value INT -- Variablle para los valores de configuración de parámetros de sys.configurations 
+DECLARE @run_value_ad INT
+
+	SELECT @run_value = CONVERT(INT,value_in_use)
+	FROM sys.configurations
+
+	WHERE name = 'Ole Automation Procedures'
+
+IF (@run_value = 0 )
+
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_2.5,CIS,Ensure ''Ole Automation Procedures'' Server Configuration Option is set to ''0'',Comply,No remediation,El parámetro "Ole Automation Procedures" esta deshabilitado>> C:\Hardening\Hardnening_Resume.txt'''
+END
+
+ELSE
+
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_2.5,CIS,Ensure ''Ole Automation Procedures'' Server Configuration Option is set to ''0'',No Comply,Remediation,El parámetro "Ole Automation Procedures" esta habilitado>> C:\Hardening\Hardnening_Resume.txt'''
+
+
+		exec master..xp_cmdshell 'echo ''--- Script de remediación ref17,2.5	> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''Ole Automation Procedures'', 0;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+
+exec master..xp_cmdshell 'echo ''--- Script de Roll Back ref17,2.5> C:\Hardening\Script_Rollback.txt'''	
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''Ole Automation Procedures'', 1;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+
+end
+
+go 
+--Remediation ejecute
+exec ('sp_configure ''show advanced options'', 1;') 
+
+exec ('RECONFIGURE;') 
+
+exec ('sp_configure ''Ole Automation Procedures'', 0;')
+ 
+exec ('RECONFIGURE;') 
+
+go
+--==========================================================================================================================
+---- SEG 2.12
+---- Ensure 'Hide Instance' option is set to 'Yes' for Production SQL Server instances
+--==========================================================================================================================
+
+DECLARE @getValue INT;
+EXEC master..xp_instance_regread
+@rootkey = N'HKEY_LOCAL_MACHINE',
+@key = N'SOFTWARE\Microsoft\Microsoft SQL
+Server\MSSQLServer\SuperSocketNetLib',
+@value_name = N'HideInstance',
+@value = @getValue OUTPUT;
+---SELECT @getValue;
+
+IF (@getValue = 1 )
+AND SERVERPROPERTY('IsClustered') = 0
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_2.12,CIS,Ensure ''Hide Instance'' option is set to ''Yes'' for Production SQL Server instances,Comply,No remediation,La instancia se encuentra Invisible>> C:\Hardening\Hardnening_Resume.txt'''
+END
+
+ELSE
+
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_2.12,CIS,Ensure ''Hide Instance'' option is set to ''Yes'',No Comply,Remediation,La instancia se encuentra Visible>> C:\Hardening\Hardnening_Resume.txt'''
+
+		exec master..xp_cmdshell 'echo ''--- Script de Roll Back ref19,2.12>> C:\Hardening\Script_Remediation.txt'''	
+				exec master..xp_cmdshell 'echo ''EXEC master..xp_instance_regwrite @rootkey = N''HKEY_LOCAL_MACHINE'',>> C:\Hardening\Script_Remediation.txt'''	
+				exec master..xp_cmdshell 'echo ''@key = N''SOFTWARE\Microsoft\Microsoft SQL Server\MSSQLServer\SuperSocketNetLib'',>> C:\Hardening\Script_Remediation.txt'''	
+				exec master..xp_cmdshell 'echo ''@value_name = N''HideInstance'',>> C:\Hardening\Script_Remediation.txt'''	
+				exec master..xp_cmdshell 'echo ''@type = N''REG_DWORD'',>> C:\Hardening\Script_Remediation.txt'''	
+				exec master..xp_cmdshell 'echo ''@value = 1;>> C:\Hardening\Script_Remediation.txt'''	
+
+
+		exec master..xp_cmdshell 'echo ''--- Script de Roll Back ref19,2.12>> C:\Hardening\Script_Rollback.txt'''	
+				exec master..xp_cmdshell 'echo ''EXEC master..xp_instance_regwrite @rootkey = N''HKEY_LOCAL_MACHINE'',>> C:\Hardening\Script_Rollback.txt'''
+				exec master..xp_cmdshell 'echo ''@key = N''SOFTWARE\Microsoft\Microsoft SQL Server\MSSQLServer\SuperSocketNetLib'',>> C:\Hardening\Script_Rollback.txt'''
+				exec master..xp_cmdshell 'echo ''@value_name = N''HideInstance'',>> C:\Hardening\Script_Rollback.txt'''
+				exec master..xp_cmdshell 'echo ''@type = N''REG_DWORD'',>> C:\Hardening\Script_Rollback.txt'''
+				exec master..xp_cmdshell 'echo ''@value = 1;>> C:\Hardening\Script_Rollback.txt'''
+
+end
+--Remediation ejecute
+go 
+
+EXEC master..xp_instance_regwrite @rootkey = N'HKEY_LOCAL_MACHINE',
+@key = N'SOFTWARE\Microsoft\Microsoft SQL Server\MSSQLServer\SuperSocketNetLib',
+@value_name = N'HideInstance',
+@type = N'REG_DWORD',
+@value = 1;
+
+GO
+--==========================================================================================================================
+---- SEG 5.1
+---- Ensure 'Maximum number of error log files' is set to greater than or equal to '12'
+--==========================================================================================================================
+
+
+
+
+
+
+
+
+
+DECLARE @NumErrorLogs int;
+EXEC master.sys.xp_instance_regread
+N'HKEY_LOCAL_MACHINE',
+N'Software\Microsoft\MSSQLServer\MSSQLServer',
+N'NumErrorLogs',
+@NumErrorLogs OUTPUT;
+SELECT ISNULL(@NumErrorLogs, -1) AS [NumberOfLogFiles];
+
+IF (@NumErrorLogs>= 12)
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_5.1,CIS,Ensure ''Maximum number of error log files'' is set to greater than or equal to ''12'',Comply,No remediation,La instancia se encuentra configurada con 12 Archivos de error Log>> C:\Hardening\Hardnening_Resume.txt'''
+
+END
+
+ELSE
+
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_5.1,CIS,Ensure ''Maximum number of error log files'' = ''12'',No Comply,Remediation,La instancia no cuenta con 12 Archivos de error Log configurados>> C:\Hardening\Hardnening_Resume.txt'''
+
+		exec master..xp_cmdshell 'echo ''--- Script de Remediation ref20,5.1>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''EXEC master.sys.xp_instance_regwrite N''HKEY_LOCAL_MACHINE'', N''Software\Microsoft\MSSQLServer\MSSQLServer'', N''NumErrorLogs'', REG_DWORD, 12;>> C:\Hardening\Script_Remediation.txt'''	
+	
+		exec master..xp_cmdshell 'echo ''--- Script de Roll Back ref20,5.1>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''EXEC master.sys.xp_instance_regwrite N''HKEY_LOCAL_MACHINE'', N''Software\Microsoft\MSSQLServer\MSSQLServer'', N''NumErrorLogs'', REG_DWORD, 6;>> C:\Hardening\Script_Rollback.txt'''
+end
+go 
+--Remediation ejecute
+exec master.sys.xp_instance_regwrite N'HKEY_LOCAL_MACHINE',N'Software\Microsoft\MSSQLServer\MSSQLServer',N'NumErrorLogs',REG_DWORD, 12;
+
+--==========================================================================================================================
+---- SEG 5.2
+---- Ensure 'Default Trace Enabled' Server Configuration Option is set to '1'
+--==========================================================================================================================
+DECLARE @getValue INT;
+
+SELECT name,
+CAST(value as int) as value_configured,
+CAST(value_in_use as int) as value_in_use
+FROM sys.configurations
+WHERE name = 'default trace enabled';
+
+IF (@getValue = 1 )
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_5.2, CIS,Ensure ''Default Trace Enabled'' 1,Comply,No remediation,El rastreo se encuntra Habilitado>> C:\Hardening\Hardnening_Resume.txt'''
+END
+
+ELSE
+
+BEGIN
+		exec master..xp_cmdshell 'echo ''SEG_5.2,CIS,Ensure ''Default Trace Enabled'',No Comply,Remediation,El rastreo se encuntra Deshabilitado>> C:\Hardening\Hardnening_Resume.txt'''
+END
+
+		exec master..xp_cmdshell 'echo ''--- Script de remediación ref19,5.2	> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''default trace enabled'', 0;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+
+exec master..xp_cmdshell 'echo ''--- Script de Roll Back ref19,5.2> C:\Hardening\Script_Rollback.txt'''	
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''default trace enabled'', 1;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+
+go 
+--Remediation ejecute
+exec ('EXECUTE sp_configure ''show advanced options'', 1;')
+exec ('RECONFIGURE;')
+exec ('EXECUTE sp_configure ''default trace enabled'', 1;')
+exec ('RECONFIGURE;')
+exec ('EXECUTE sp_configure ''show advanced options'', 0;')
+exec ('RECONFIGURE;')
+
+
+--==========================================================================================================================
+---- SEG 2.12
+-----2.12	Ensure 'Hide Instance' option is set to 'Yes' for Non-clustered SQL Server Production environments
+
+--==========================================================================================================================
+
+EXEC master..xp_instance_regwrite
+      @rootkey = N'HKEY_LOCAL_MACHINE',
+      @key = N'SOFTWARE\Microsoft\Microsoft SQL Server\MSSQLServer\SuperSocketNetLib',
+      @value_name = N'HideInstance',
+      @type = N'REG_DWORD',
+      @value = 1
+
+
+
+
+
+
+
+--==========================================================================================================================
+---- SEG 2.15
+
+---- Ensure 'xp_cmdshell' Server Configuration Option is set to '0'
+--==========================================================================================================================
+DECLARE @run_value INT -- Variablle para los valores de configuración de parámetros de sys.configurations 
+DECLARE @run_value_ad INT
+	SELECT @run_value = CONVERT(INT,value_in_use)
+	FROM sys.configurations
+	
+WHERE name = 'xp_cmdshell'
+
+IF (@run_value = 0)
+
+BEGIN
+
+exec master..xp_cmdshell 'echo ''SEG_2.15,CIS,Ensure ''xp_cmdshell'' Server Configuration Option is set to ''0'',Comply,No remediation,El parámetro "xp_cmdshell" esta deshabilitado>> C:\Hardening\Hardnening_Resume.txt'''
+
+
+END
+
+ELSE
+
+BEGIN
+exec master..xp_cmdshell 'echo ''SEG_2.15,CIS,Ensure ''xp_cmdshell'' Server Configuration Option is set to ''0'',No Comply,Remediation,El parámetro "xp_cmdshell" esta habilitado>> C:\Hardening\Hardnening_Resume.txt'''
+		
+
+		exec master..xp_cmdshell 'echo ''--- Script de remediación ref12,2.15	> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''xp_cmdshell'', 0;>> C:\Hardening\Script_Remediation.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Remediation.txt'
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Remediation.txt'''
+
+exec master..xp_cmdshell 'echo ''--- Script de Roll Back ref12,2.15> C:\Hardening\Script_Rollback.txt'''	
+		exec master..xp_cmdshell 'echo ''EXECUTE sp_configure ''show advanced options'', 1;> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''xp_cmdshell'', 1;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec EXECUTE sp_configure ''show advanced options'', 0;>> C:\Hardening\Script_Rollback.txt'''
+		exec master..xp_cmdshell 'echo ''exec RECONFIGURE;>> C:\Hardening\Script_Rollback.txt'''
+end
+go 
+--Remediation ejecute
+exec ('EXECUTE sp_configure ''show advanced options'', 1;')
+exec ('RECONFIGURE;')
+exec ('EXECUTE sp_configure ''xp_cmdshell'', 0;')
+exec ('RECONFIGURE;')
+exec ('EXECUTE sp_configure ''show advanced options'', 0;')
+exec ('RECONFIGURE;')
+
+--==========================================================================================================================
+--- Fin de Hardening Creación de scripts para solventar issues de incumplimiento
+
+
+
+
+
